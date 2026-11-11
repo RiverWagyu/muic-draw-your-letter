@@ -1,0 +1,209 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Draw Your Letter</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: phone-first flow (pick → paint → sent) + a wide wall view for the projector */
+:root{
+  --bg:#15124F; --panel:#0B1238; --card:#1D1A63; --ink:#FFF8E8; --sub:#C2CCE4;
+  --gold:#FFD23F; --paper:#FFF8E8; --line:rgba(255,255,255,.14);
+  color-scheme:dark;
+}
+body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:0;min-height:100%}
+h1,h2,h3{font-family:Poppins,Inter,sans-serif;text-wrap:balance;margin:0}
+.view{max-width:520px;margin:0 auto;padding-block:22px 34px;display:flex;flex-direction:column;gap:14px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:3px;color:var(--gold)}
+.sub{color:var(--sub);font-size:14.5px;line-height:1.5;margin:0}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.cardBtn{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 6px 10px;
+  display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;color:var(--ink)}
+.cardBtn:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.cardBtn canvas{width:76px;height:76px}
+.cardBtn span{font:600 12.5px Inter}
+button{font-family:inherit}
+.bar{display:flex;align-items:center;gap:10px}
+.back{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:17px;cursor:pointer}
+.canvasWrap{background:var(--paper);border-radius:20px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:6px}
+#paintCanvas{width:min(100%,360px);touch-action:none;border-radius:12px;cursor:crosshair}
+.hint{color:#8A8372;font-size:12.5px;margin:0}
+.palette{display:flex;flex-wrap:wrap;gap:9px;justify-content:center}
+.swatch{width:34px;height:34px;border-radius:50%;border:2px solid rgba(255,255,255,.25);cursor:pointer;padding:0}
+.swatch[aria-pressed="true"]{box-shadow:0 0 0 3px var(--bg),0 0 0 6px #fff}
+.tools{display:flex;align-items:center;gap:10px;justify-content:center;color:var(--sub);font-size:13px}
+.brush{border-radius:50%;background:#C9D3E3;border:none;cursor:pointer;padding:0}
+.brush[aria-pressed="true"]{background:#fff;box-shadow:0 0 0 3px #3F6BFF}
+.ghost{background:none;border:1px solid var(--line);color:var(--sub);border-radius:10px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600}
+.primary{background:var(--gold);color:#12305C;border:none;border-radius:14px;min-height:52px;font:800 17px Poppins;cursor:pointer;letter-spacing:.5px}
+.note{color:var(--sub);font-size:12px;text-align:center;margin:0}
+.boardScroller{overflow-x:auto;border-radius:16px}
+.board{min-width:1190px;background:var(--panel);border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+.boardHead{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 18px;background:#080D2A}
+.cols{display:grid;grid-template-columns:repeat(9,minmax(0,1fr))}
+.col{position:relative;min-height:430px;border-left:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column}
+.col .big{font:800 86px/1 Poppins;text-align:center;margin-top:8px;text-shadow:0 4px 0 rgba(0,0,0,.25)}
+.col .meaning{margin-top:auto;background:rgba(5,8,34,.55);border-top:3px solid;padding:9px 9px 11px;display:flex;flex-direction:column;gap:5px;min-height:118px}
+.col .meaning b{font:700 12.5px Poppins;display:flex;align-items:center;gap:6px}
+.col .meaning i{font:500 10px/1.35 Inter;font-style:normal;color:rgba(255,255,255,.85)}
+.chipL{flex:none;width:20px;height:20px;border-radius:50%;color:#12305C;font:800 12px/20px Poppins;text-align:center}
+.stick{position:absolute;filter:drop-shadow(0 6px 8px rgba(0,0,0,.45))}
+.stick img{display:block;width:100%}
+@media (prefers-reduced-motion:no-preference){
+  .stick{animation:bob 4.2s ease-in-out infinite alternate}
+  @keyframes bob{from{transform:translateY(-5px) rotate(var(--r,0deg))}to{transform:translateY(7px) rotate(var(--r,0deg))}}
+}
+.justSent{position:absolute;background:var(--gold);color:#12305C;font:800 11px Poppins;padding:3px 9px;border-radius:999px;letter-spacing:.5px}
+.wallWide .view{max-width:1240px}
+.sentWrap{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.sentWrap img{width:min(62vw,260px);filter:drop-shadow(0 10px 14px rgba(0,0,0,.45))}
+.row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.pillBtn{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:12px 18px;font:700 14px Poppins;cursor:pointer}
+</style>
+
+<div id="app"></div>
+
+<script>
+"use strict";
+const V=[["M","Mastery","#4F7BFF","MUIC is a culture of mastery where people always pursue excellence in their work, in themselves, and in their environment."],
+["A","Altruism","#2DBE7B","MUIC is a culture of altruism where our ultimate value is to expand people's potential, enrich their lives, and help them shape a sustainable future."],
+["H","Harmony","#1FC4D6","MUIC is a culture of harmony where people work together and interact with one another with peace, positivity, and pleasantness."],
+["I","Integrity","#A974FF","MUIC is a culture of integrity where responsibility, fairness, and moral courage are integrated into the way we work and the way we treat one another."],
+["D","Determination","#FF5A52","MUIC is a culture of determination where people keep moving forward with great strength despite challenges and tensions."],
+["O","Originality","#FF9440","MUIC is a culture of originality where novelty and innovation are created on the strong foundation of our heritage."],
+["L","Leadership","#FFD23F","MUIC is a culture where leadership is practiced by all as a way to empower ourselves, set our own path, and step out of our comfort zone."],
+["I","Inclusion","#FF5FA2","MUIC is a culture of inclusiveness where diverse people are accepted and appreciated and this diversity flourishes into a creation greater than the sum of each individual."],
+["C","Connectedness","#5CC8FF","MUIC is a culture of connectedness where professional connections are established with purpose to help bridge our students, our customers, our people, and our MU/MUOL to a greater and wider ecosystem."]];
+const FACE={M:[[112,120],[208,120],12,[160,160],44],A:[[143,112],[177,112],9,[160,134],22],
+H:[[84,128],[236,128],14,[160,163],58],I:[[143,118],[177,118],10,[160,150],30],
+D:[[226,138],[262,138],10,[244,172],28],O:[[128,90],[192,90],11,[160,112],34],
+L:[[88,112],[122,112],10,[105,144],28],C:[[50,142],[88,142],10,[69,174],28]};
+const PAL=["#F0483E","#FF8A2B","#FFD43B","#3DBB5D","#49B6FF","#3F6BFF","#9B5DE5","#FF6FAE","#1B1B3A","#FFFFFF"];
+const S=320, FONT='800 300px Poppins, Arial, sans-serif';
+const app=document.getElementById('app');
+let fontsReady=false;
+const fontsP=(document.fonts&&document.fonts.load)?document.fonts.load(FONT).then(()=>{fontsReady=true}).catch(()=>{}):Promise.resolve();
+
+function glyph(ctx,L,mode,color){ctx.font=FONT;ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  if(mode==='fill'){ctx.fillStyle=color;ctx.fillText(L,160,265);}else{ctx.strokeStyle=color;ctx.lineJoin='round';ctx.lineWidth=mode;ctx.strokeText(L,160,265);}}
+function drawFace(ctx,L){const f=FACE[L];if(!f)return;const[[x1,y1],[x2,y2],r,[sx,sy],w]=f;
+  for(const[cx,cy]of[[x1,y1],[x2,y2]]){ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fillStyle='#fff';ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#1B1B3A';ctx.stroke();
+    ctx.beginPath();ctx.arc(cx+2,cy+2,r*.5,0,7);ctx.fillStyle='#1B1B3A';ctx.fill();}
+  ctx.beginPath();ctx.moveTo(sx-w/2,sy);ctx.quadraticCurveTo(sx,sy+w*.5,sx+w/2,sy);
+  ctx.lineCap='round';ctx.lineWidth=10;ctx.strokeStyle='#fff';ctx.stroke();ctx.lineWidth=5;ctx.strokeStyle='#1B1B3A';ctx.stroke();}
+function makeMask(L){const c=document.createElement('canvas');c.width=c.height=S;const x=c.getContext('2d');glyph(x,L,'fill','#fff');return c;}
+// sticker = white border + cream letter + paint clipped inside + colored outline + face
+function compose(target,vi,strokesCanvas){const[L,,col]=V[vi];const ctx=target.getContext('2d');ctx.clearRect(0,0,S,S);
+  glyph(ctx,L,26,'#FFFBEF');glyph(ctx,L,'fill','#FFFBEF');
+  if(strokesCanvas){const clip=document.createElement('canvas');clip.width=clip.height=S;const cx=clip.getContext('2d');
+    cx.drawImage(strokesCanvas,0,0);cx.globalCompositeOperation='destination-in';cx.drawImage(makeMask(L),0,0);ctx.drawImage(clip,0,0);}
+  glyph(ctx,L,10,col);drawFace(ctx,L);}
+
+let store=[];try{store=JSON.parse(localStorage.getItem('dyl1')||'[]');}catch(e){}
+function save(){try{localStorage.setItem('dyl1',JSON.stringify(store.slice(-36)));}catch(e){}}
+function demoSeed(){if(store.length)return;const seeds=[[0,'#49B6FF','#FFF8E8'],[2,'#3DBB5D','#FFD43B'],[5,'#FF8A2B','#FFD43B'],[8,'#9B5DE5','#FF6FAE']];
+  for(const[vi,a,b]of seeds){const sc=document.createElement('canvas');sc.width=sc.height=S;const x=sc.getContext('2d');
+    x.fillStyle=a;x.fillRect(0,0,S,S);x.fillStyle=b;for(let r=0;r<8;r++)for(let c=0;c<8;c++){x.beginPath();x.arc(20+c*44+(r%2?22:0),30+r*40,11,0,7);x.fill();}
+    const t=document.createElement('canvas');t.width=t.height=S;compose(t,vi,sc);
+    store.push({vi,img:t.toDataURL('image/png'),t:Date.now()-9e5,demo:1});}}
+
+let cur={vi:4,strokes:[],color:'#3DBB5D',size:14,drawing:null};
+function route(){const h=(location.hash||'').replace('#','');document.body.classList.toggle('wallWide',h==='wall');
+  if(h==='wall')renderWall();else if(h.startsWith('paint-'))renderPaint(+h.split('-')[1]||0);
+  else if(h==='sent')renderSent();else renderPick();}
+addEventListener('hashchange',route);
+
+function el(html){const d=document.createElement('div');d.innerHTML=html;return d.firstElementChild;}
+
+function renderPick(){app.innerHTML='';const v=el(`<div class="view">
+  <div class="eyebrow">THE MUIC JOURNEY · ADITAYATHORN WALL</div>
+  <h1 style="font-size:28px">Pick your letter</h1>
+  <p class="sub">Every MUIC core value is a character. Choose one and paint it your way.</p>
+  <div class="grid" id="g"></div>
+  <p class="note">Your painting joins the wall when you press send.</p>
+  <div class="row"><button class="pillBtn" id="toWall">Open the wall view</button></div></div>`);
+  const g=v.querySelector('#g');
+  V.forEach((val,i)=>{const b=el(`<button class="cardBtn" id="pick-${i}" aria-label="Paint ${val[1]}"><canvas width="${S}" height="${S}"></canvas><span>${val[1]}</span></button>`);
+    b.onclick=()=>{cur={vi:i,strokes:[],color:PAL[3],size:14,drawing:null};location.hash='paint-'+i;};
+    g.appendChild(b);fontsP.then(()=>compose(b.querySelector('canvas'),i,null));});
+  v.querySelector('#toWall').onclick=()=>location.hash='wall';app.appendChild(v);}
+
+function renderPaint(vi){cur.vi=vi;const[L,name,col,meaning]=V[vi];app.innerHTML='';
+  const v=el(`<div class="view">
+   <div class="bar"><button class="back" id="bk" aria-label="Back">&#8592;</button>
+     <h2 style="font-size:21px">${L} · ${name}</h2></div>
+   <p class="sub" style="font-size:12.5px">${meaning}</p>
+   <div class="canvasWrap"><canvas id="paintCanvas" width="${S}" height="${S}"></canvas>
+     <p class="hint">Paint inside the letter — it keeps your color inside the lines.</p></div>
+   <div class="palette" id="pal"></div>
+   <div class="tools"><span>Brush</span>
+     <button class="brush" id="b1" style="width:14px;height:14px" aria-label="Small brush"></button>
+     <button class="brush" id="b2" style="width:20px;height:20px" aria-pressed="true" aria-label="Medium brush"></button>
+     <button class="brush" id="b3" style="width:28px;height:28px" aria-label="Big brush"></button>
+     <span style="margin-left:auto"></span>
+     <button class="ghost" id="undo">Undo</button><button class="ghost" id="clr">Clear</button></div>
+   <button class="primary" id="send">SEND TO THE WALL</button>
+   <p class="note">In the real wall, a student club approves drawings before they appear.</p></div>`);
+  app.appendChild(v);
+  const cv=v.querySelector('#paintCanvas'),ctx=cv.getContext('2d');
+  const sc=document.createElement('canvas');sc.width=sc.height=S;const sx=sc.getContext('2d');
+  const pal=v.querySelector('#pal');
+  PAL.forEach((p,i)=>{const s=el(`<button class="swatch" id="sw-${i}" style="background:${p}" aria-label="Color ${p}" aria-pressed="${p===cur.color}"></button>`);
+    s.onclick=()=>{cur.color=p;pal.querySelectorAll('.swatch').forEach(w=>w.setAttribute('aria-pressed','false'));s.setAttribute('aria-pressed','true');};
+    pal.appendChild(s);});
+  const sizes={b1:8,b2:14,b3:24};
+  for(const id in sizes){v.querySelector('#'+id).onclick=e=>{cur.size=sizes[id];
+    v.querySelectorAll('.brush').forEach(b=>b.setAttribute('aria-pressed','false'));e.currentTarget.setAttribute('aria-pressed','true');};}
+  function redraw(){sx.clearRect(0,0,S,S);for(const st of cur.strokes){sx.strokeStyle=st.c;sx.lineWidth=st.s;sx.lineCap=sx.lineJoin='round';
+      sx.beginPath();st.p.forEach(([x,y],i)=>i?sx.lineTo(x,y):sx.moveTo(x,y));if(st.p.length===1)sx.lineTo(st.p[0][0]+.1,st.p[0][1]);sx.stroke();}
+    compose(cv,vi,sc);}
+  fontsP.then(redraw);
+  const pos=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*S/r.width,(e.clientY-r.top)*S/r.height];};
+  cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);cur.drawing={c:cur.color,s:cur.size,p:[pos(e)]};cur.strokes.push(cur.drawing);redraw();});
+  cv.addEventListener('pointermove',e=>{if(cur.drawing){cur.drawing.p.push(pos(e));redraw();}});
+  const stop=()=>{cur.drawing=null;};cv.addEventListener('pointerup',stop);cv.addEventListener('pointercancel',stop);
+  v.querySelector('#undo').onclick=()=>{cur.strokes.pop();redraw();};
+  v.querySelector('#clr').onclick=()=>{cur.strokes=[];redraw();};
+  v.querySelector('#bk').onclick=()=>{location.hash='';};
+  v.querySelector('#send').onclick=()=>{if(!cur.strokes.length){v.querySelector('.hint').textContent='Paint something first — tap a color and draw!';return;}
+    redraw();let img;try{img=cv.toDataURL('image/webp',.82);}catch(e){}if(!img||img.length<200)img=cv.toDataURL('image/png');
+    store=store.filter(d=>!d.demo||store.length<30);store.push({vi,img,t:Date.now()});save();location.hash='sent';};}
+
+function renderSent(){const last=store[store.length-1];if(!last){location.hash='';return;}
+  app.innerHTML='';const v=el(`<div class="view sentWrap">
+   <div class="eyebrow">SENT TO THE WALL</div>
+   <h1 style="font-size:26px">Your ${V[last.vi][1]} is alive!</h1>
+   <img alt="Your painted letter" src="${last.img}">
+   <p class="sub">It floats onto the big wall with everyone else's. Nine letters, one community.</p>
+   <div class="row"><button class="primary" style="padding:0 22px" id="w">SEE THE WALL</button>
+   <button class="pillBtn" id="again">Paint another</button></div></div>`);
+  v.querySelector('#w').onclick=()=>location.hash='wall';v.querySelector('#again').onclick=()=>location.hash='';app.appendChild(v);}
+
+function renderWall(){demoSeed();app.innerHTML='';
+  const v=el(`<div class="view"><div class="boardScroller"><div class="board">
+   <div class="boardHead"><div><div style="font:800 26px Poppins">THE MUIC JOURNEY</div>
+     <div class="eyebrow" style="letter-spacing:4px">DRAW YOUR VALUE · WATCH IT COME ALIVE</div></div>
+     <div style="text-align:right;font:600 13px/1.4 Inter;color:var(--sub)">Scan the QR · pick a letter · paint it<br>Your drawing joins this wall</div></div>
+   <div class="cols" id="cols"></div></div></div>
+   <div class="row" style="margin-top:4px"><button class="pillBtn" id="draw">+ Draw yours</button>
+     <button class="ghost" id="clear">Clear wall</button></div></div>`);
+  const cols=v.querySelector('#cols');const newest=store.length?Math.max(...store.map(d=>d.t)):0;
+  V.forEach(([L,name,col,meaning],i)=>{const tint=`color-mix(in srgb, ${col} 26%, #15124F)`;
+    const c=el(`<div class="col" style="background:${tint}">
+      <div class="big" style="color:${col}">${L}</div><div class="area" style="position:relative;flex:1"></div>
+      <div class="meaning" style="border-color:${col}"><b><span class="chipL" style="background:${col}">${L}</span>${name}</b><i>${meaning}</i></div></div>`);
+    const area=c.querySelector('.area');const mine=store.filter(d=>d.vi===i).slice(-3);
+    mine.forEach((d,k)=>{const w=54+Math.round(Math.random()*18);
+      const s=el(`<div class="stick" style="width:${w}%;left:${6+Math.random()*28}%;top:${4+k*31+Math.random()*6}%;--r:${(Math.random()*16-8).toFixed(1)}deg"><img alt="A painted ${name}" src="${d.img}"></div>`);
+      if(d.t===newest&&!d.demo){s.style.filter='drop-shadow(0 0 10px #FFE58A) drop-shadow(0 0 4px #FFE58A)';
+        s.appendChild(el('<span class="justSent" style="right:-8px;top:-10px">JUST SENT</span>'));}
+      area.appendChild(s);});
+    cols.appendChild(c);});
+  v.querySelector('#draw').onclick=()=>location.hash='';
+  v.querySelector('#clear').onclick=()=>{store=[];save();renderWall();};
+  app.appendChild(v);}
+
+fontsP.then(route);route();
+</script>
+
+</body></html>
