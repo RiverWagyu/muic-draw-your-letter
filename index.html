@@ -46,13 +46,13 @@ button{font-family:inherit}
 .board{min-width:1190px;background:var(--panel);border-radius:16px;overflow:hidden;border:1px solid var(--line)}
 .boardHead{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 18px;background:#080D2A}
 .cols{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));position:relative}
-.sky{position:absolute;left:0;right:0;top:0;bottom:150px;pointer-events:none;overflow:hidden;z-index:2}
+.sky{position:absolute;left:0;right:0;top:0;bottom:170px;pointer-events:none;overflow:hidden;z-index:2}
 .fl{position:absolute;left:0;top:0;will-change:transform}
 .fl .in{position:relative;filter:drop-shadow(0 6px 8px rgba(0,0,0,.45))}
 .fl img{display:block;width:100%}
 .col{position:relative;min-height:560px;border-left:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column}
 .col .big{font:800 86px/1 Poppins;text-align:center;margin-top:8px;text-shadow:0 4px 0 rgba(0,0,0,.25)}
-.col .meaning{margin-top:auto;background:rgba(5,8,34,.55);border-top:3px solid;padding:9px 9px 11px;display:flex;flex-direction:column;gap:5px;min-height:118px}
+.col .meaning{margin-top:auto;background:rgba(5,8,34,.55);border-top:3px solid;padding:9px 9px 11px;display:flex;flex-direction:column;gap:5px;min-height:170px;box-sizing:border-box}
 .col .meaning b{font:700 12.5px Poppins;display:flex;align-items:center;gap:6px}
 .col .meaning i{font:500 10px/1.35 Inter;font-style:normal;color:rgba(255,255,255,.85)}
 .chipL{flex:none;width:20px;height:20px;border-radius:50%;color:#12305C;font:800 12px/20px Poppins;text-align:center}
@@ -88,6 +88,7 @@ const V=[["M","Mastery","#4F7BFF","MUIC is a culture of mastery where people alw
 ["L","Leadership","#FFD23F","MUIC is a culture where leadership is practiced by all as a way to empower ourselves, set our own path, and step out of our comfort zone."],
 ["I","Inclusion","#FF5FA2","MUIC is a culture of inclusiveness where diverse people are accepted and appreciated and this diversity flourishes into a creation greater than the sum of each individual."],
 ["C","Connectedness","#5CC8FF","MUIC is a culture of connectedness where professional connections are established with purpose to help bridge our students, our customers, our people, and our MU/MUOL to a greater and wider ecosystem."]];
+V.forEach(v=>{v[3]=v[3].replace(/^MUIC is a culture (?:of \w+ )?where /i,'');v[3]=v[3][0].toUpperCase()+v[3].slice(1);});
 const FACE={M:[[112,120],[208,120],12,[160,160],44],A:[[143,112],[177,112],9,[160,134],22],
 H:[[84,128],[236,128],14,[160,163],58],I:[[143,118],[177,118],10,[160,150],30],
 D:[[226,138],[262,138],10,[244,172],28],O:[[128,90],[192,90],11,[160,112],34],
@@ -157,7 +158,7 @@ function syncFloaters(){if(!wall)return;const sky=wall.sky,W=sky.clientWidth,H=s
   const want=cloud.size?[...cloud.values()].sort((a,b)=>a.key<b.key?-1:1).slice(-40):(demoList||[]);
   const keep=new Set(want.map(d=>d.key));
   for(const[k,f]of flo){if(!keep.has(k)){f.el.remove();flo.delete(k);}}
-  const w=Math.max(54,Math.min(84,W/15));
+  const w=Math.max(40,Math.min(60,W/21));
   want.forEach(d=>{let f=flo.get(d.key);
     if(!f){const r=seeded(d.key);const e=el(`<div class="fl" style="width:${w}px"><div class="in"><img alt="A painted ${V[d.vi][1]}"></div></div>`);
       e.querySelector('img').src=d.img;sky.appendChild(e);
