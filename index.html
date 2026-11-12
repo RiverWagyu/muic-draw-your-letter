@@ -157,7 +157,7 @@ function syncFloaters(){if(!wall)return;const sky=wall.sky,W=sky.clientWidth,H=s
   const want=cloud.size?[...cloud.values()].sort((a,b)=>a.key<b.key?-1:1).slice(-40):(demoList||[]);
   const keep=new Set(want.map(d=>d.key));
   for(const[k,f]of flo){if(!keep.has(k)){f.el.remove();flo.delete(k);}}
-  const w=Math.max(84,Math.min(132,W/9.5));
+  const w=Math.max(54,Math.min(84,W/15));
   want.forEach(d=>{let f=flo.get(d.key);
     if(!f){const r=seeded(d.key);const e=el(`<div class="fl" style="width:${w}px"><div class="in"><img alt="A painted ${V[d.vi][1]}"></div></div>`);
       e.querySelector('img').src=d.img;sky.appendChild(e);
