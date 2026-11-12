@@ -1,7 +1,12 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<meta name="claude:viewport-fit-sides" content="cover">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Draw Your Letter</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
 /* Layout: phone-first flow (pick → paint → sent) + a wide wall view for the projector */
 :root{
@@ -51,6 +56,8 @@ button{font-family:inherit}
 .stick img{display:block;width:100%}
 @media (prefers-reduced-motion:no-preference){
   .stick{animation:bob 4.2s ease-in-out infinite alternate}
+  .stick.pop img{animation:pop .7s cubic-bezier(.2,1.4,.4,1) both}
+  @keyframes pop{from{transform:scale(.2) rotate(-12deg);opacity:0}to{transform:none;opacity:1}}
   @keyframes bob{from{transform:translateY(-5px) rotate(var(--r,0deg))}to{transform:translateY(7px) rotate(var(--r,0deg))}}
 }
 .justSent{position:absolute;background:var(--gold);color:#12305C;font:800 11px Poppins;padding:3px 9px;border-radius:999px;letter-spacing:.5px}
@@ -60,6 +67,9 @@ button{font-family:inherit}
 .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 .pillBtn{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:12px 18px;font:700 14px Poppins;cursor:pointer}
 </style>
+<style>html,body{margin:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+</head>
+<body>
 
 <div id="app"></div>
 
@@ -99,16 +109,63 @@ function compose(target,vi,strokesCanvas){const[L,,col]=V[vi];const ctx=target.g
     cx.drawImage(strokesCanvas,0,0);cx.globalCompositeOperation='destination-in';cx.drawImage(makeMask(L),0,0);ctx.drawImage(clip,0,0);}
   glyph(ctx,L,10,col);drawFace(ctx,L);}
 
-let store=[];try{store=JSON.parse(localStorage.getItem('dyl1')||'[]');}catch(e){}
-function save(){try{localStorage.setItem('dyl1',JSON.stringify(store.slice(-36)));}catch(e){}}
-function demoSeed(){if(store.length)return;const seeds=[[0,'#49B6FF','#FFF8E8'],[2,'#3DBB5D','#FFD43B'],[5,'#FF8A2B','#FFD43B'],[8,'#9B5DE5','#FF6FAE']];
+/* ---------- Shared wall (Firebase Realtime Database) ---------- */
+const FB_CONFIG={apiKey:"AIzaSyD-mBQ0jyxSeRYyaVmN8ShJBrPmxWxYKmU",authDomain:"draw-your-letter-digital-wall.firebaseapp.com",
+  databaseURL:"https://draw-your-letter-digital-wall-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"draw-your-letter-digital-wall",storageBucket:"draw-your-letter-digital-wall.firebasestorage.app",
+  messagingSenderId:"791054427546",appId:"1:791054427546:web:e1957b12eac678e5804623"};
+const MODERATE=false; // true = a drawing only shows once you set ok:true on it in the Firebase console (student-club approval)
+let db=null;
+try{if(window.firebase&&firebase.database){firebase.initializeApp(FB_CONFIG);db=firebase.database();}}catch(e){db=null;}
+
+let last=null;try{last=JSON.parse(localStorage.getItem('dyl2')||'null');}catch(e){}
+function saveLast(){try{localStorage.setItem('dyl2',JSON.stringify(last));}catch(e){}}
+
+const cloud=new Map();           // key -> {key,vi,img,t,arrived}
+let loaded=false,connected=false,wall=null,dirty=new Set(),raf=0,wasEmpty=true,demoList=null;
+const okImg=s=>typeof s==='string'&&/^data:image\/(webp|png);base64,[A-Za-z0-9+\/=]+$/.test(s);
+function take(s){const d=s.val();if(!d||!okImg(d.img)||!(d.vi>=0&&d.vi<9))return;
+  if(MODERATE&&d.ok!==true){if(cloud.delete(s.key))ping(d.vi);return;}
+  cloud.set(s.key,{key:s.key,vi:d.vi|0,img:d.img,t:d.t||0,arrived:loaded?Date.now():0});ping(d.vi|0);
+  if(loaded)setTimeout(()=>ping(d.vi|0),20500);}
+function ping(vi){dirty.add(vi);if(!raf)raf=requestAnimationFrame(flush);}
+function flush(){raf=0;const d=dirty;dirty=new Set();if(!wall)return;
+  const empty=cloud.size===0;if(empty!==wasEmpty){wasEmpty=empty;for(let i=0;i<9;i++)d.add(i);}
+  d.forEach(i=>renderColumn(i));setStatus();}
+if(db){const q=db.ref('drawings').orderByKey().limitToLast(60);
+  q.on('child_added',take);q.on('child_changed',take);
+  q.on('child_removed',s=>{const d=cloud.get(s.key);cloud.delete(s.key);if(d)ping(d.vi);});
+  q.once('value',()=>{loaded=true;});
+  db.ref('.info/connected').on('value',s=>{connected=!!s.val();setStatus();});}
+function setStatus(){const n=wall&&wall.status;if(!n)return;
+  n.textContent=db?(connected?'● LIVE · '+cloud.size+' painted':'○ connecting…'):'○ offline preview';
+  n.style.color=connected?'#6CF0A0':'#FFD23F';}
+function ensureDemos(){if(demoList)return;demoList=[];
+  const seeds=[[0,'#49B6FF','#FFF8E8'],[2,'#3DBB5D','#FFD43B'],[5,'#FF8A2B','#FFD43B'],[8,'#9B5DE5','#FF6FAE']];
   for(const[vi,a,b]of seeds){const sc=document.createElement('canvas');sc.width=sc.height=S;const x=sc.getContext('2d');
     x.fillStyle=a;x.fillRect(0,0,S,S);x.fillStyle=b;for(let r=0;r<8;r++)for(let c=0;c<8;c++){x.beginPath();x.arc(20+c*44+(r%2?22:0),30+r*40,11,0,7);x.fill();}
     const t=document.createElement('canvas');t.width=t.height=S;compose(t,vi,sc);
-    store.push({vi,img:t.toDataURL('image/png'),t:Date.now()-9e5,demo:1});}}
+    demoList.push({key:'demo'+vi,vi,img:t.toDataURL('image/png'),demo:1});}}
+function seeded(k){let s=2166136261;for(const ch of k){s^=ch.charCodeAt(0);s=Math.imul(s,16777619);}s=(s>>>0)||1;
+  return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296;};}
+function renderColumn(i){if(!wall)return;const area=wall.areas[i];if(!area)return;area.innerHTML='';
+  const src=cloud.size?[...cloud.values()].filter(d=>d.vi===i).sort((a,b)=>a.key<b.key?-1:1):(demoList||[]).filter(d=>d.vi===i);
+  src.slice(-3).forEach((d,k)=>{const r=seeded(d.key),w=54+Math.round(r()*18);
+    const s=el(`<div class="stick" style="width:${w}%;left:${6+r()*28}%;top:${4+k*31+r()*6}%;--r:${(r()*16-8).toFixed(1)}deg"><img alt="A painted ${V[i][1]}"></div>`);
+    s.firstChild.src=d.img;
+    if(d.arrived&&Date.now()-d.arrived<20000){s.style.filter='drop-shadow(0 0 10px #FFE58A) drop-shadow(0 0 4px #FFE58A)';
+      s.appendChild(el('<span class="justSent" style="right:-8px;top:-10px">JUST SENT</span>'));s.classList.add('pop');}
+    area.appendChild(s);});}
+let sendState='',onSend=()=>{};
+function setSend(st){sendState=st;onSend();}
+function fitImage(cv){let img;try{img=cv.toDataURL('image/webp',.8);}catch(e){}
+  if(!img||img.indexOf('data:image/webp')!==0)img=cv.toDataURL('image/png');
+  if(img.length>140000){const c=document.createElement('canvas');c.width=c.height=220;c.getContext('2d').drawImage(cv,0,0,220,220);
+    try{img=c.toDataURL('image/webp',.7);}catch(e){}if(!img||img.indexOf('data:image/webp')!==0)img=c.toDataURL('image/png');}
+  return img;}
 
 let cur={vi:4,strokes:[],color:'#3DBB5D',size:14,drawing:null};
-function route(){const h=(location.hash||'').replace('#','');document.body.classList.toggle('wallWide',h==='wall');
+function route(){wall=null;const h=(location.hash||'').replace('#','');document.body.classList.toggle('wallWide',h==='wall');
   if(h==='wall')renderWall();else if(h.startsWith('paint-'))renderPaint(+h.split('-')[1]||0);
   else if(h==='sent')renderSent();else renderPick();}
 addEventListener('hashchange',route);
@@ -143,7 +200,7 @@ function renderPaint(vi){cur.vi=vi;const[L,name,col,meaning]=V[vi];app.innerHTML
      <span style="margin-left:auto"></span>
      <button class="ghost" id="undo">Undo</button><button class="ghost" id="clr">Clear</button></div>
    <button class="primary" id="send">SEND TO THE WALL</button>
-   <p class="note">In the real wall, a student club approves drawings before they appear.</p></div>`);
+   <p class="note">Your painting appears on the big wall in the Aditayathorn corridor.</p></div>`);
   app.appendChild(v);
   const cv=v.querySelector('#paintCanvas'),ctx=cv.getContext('2d');
   const sc=document.createElement('canvas');sc.width=sc.height=S;const sx=sc.getContext('2d');
@@ -165,45 +222,46 @@ function renderPaint(vi){cur.vi=vi;const[L,name,col,meaning]=V[vi];app.innerHTML
   v.querySelector('#undo').onclick=()=>{cur.strokes.pop();redraw();};
   v.querySelector('#clr').onclick=()=>{cur.strokes=[];redraw();};
   v.querySelector('#bk').onclick=()=>{location.hash='';};
-  v.querySelector('#send').onclick=()=>{if(!cur.strokes.length){v.querySelector('.hint').textContent='Paint something first — tap a color and draw!';return;}
-    redraw();let img;try{img=cv.toDataURL('image/webp',.82);}catch(e){}if(!img||img.length<200)img=cv.toDataURL('image/png');
-    store=store.filter(d=>!d.demo||store.length<30);store.push({vi,img,t:Date.now()});save();location.hash='sent';};}
+  v.querySelector('#send').onclick=e=>{if(!cur.strokes.length){v.querySelector('.hint').textContent='Paint something first — tap a color and draw!';return;}
+    e.currentTarget.disabled=true;redraw();const img=fitImage(cv);
+    last={vi,img,t:Date.now()};saveLast();setSend('sending');
+    if(db){db.ref('drawings').push({letter:L,vi,img,t:firebase.database.ServerValue.TIMESTAMP}).then(()=>setSend('ok'),()=>setSend('fail'));}
+    else setSend('offline');
+    location.hash='sent';};}
 
-function renderSent(){const last=store[store.length-1];if(!last){location.hash='';return;}
+function renderSent(){if(!last){location.hash='';return;}
   app.innerHTML='';const v=el(`<div class="view sentWrap">
    <div class="eyebrow">SENT TO THE WALL</div>
    <h1 style="font-size:26px">Your ${V[last.vi][1]} is alive!</h1>
    <img alt="Your painted letter" src="${last.img}">
-   <p class="sub">It floats onto the big wall with everyone else's. Nine letters, one community.</p>
+   <p class="sub" id="st"></p>
    <div class="row"><button class="primary" style="padding:0 22px" id="w">SEE THE WALL</button>
    <button class="pillBtn" id="again">Paint another</button></div></div>`);
-  v.querySelector('#w').onclick=()=>location.hash='wall';v.querySelector('#again').onclick=()=>location.hash='';app.appendChild(v);}
+  v.querySelector('#w').onclick=()=>location.hash='wall';v.querySelector('#again').onclick=()=>location.hash='';app.appendChild(v);
+  const st=v.querySelector('#st');onSend=()=>{st.textContent=({ok:"It's on the big wall now — look up at the screen! Nine letters, one community.",
+    sending:'Sending to the wall…',fail:"Couldn't reach the wall. Check your connection and paint it again.",
+    offline:'Saved on this phone only (the live wall is not connected).'})[sendState]||'Nine letters, one community.';};onSend();}
 
-function renderWall(){demoSeed();app.innerHTML='';
+function renderWall(){app.innerHTML='';
   const v=el(`<div class="view"><div class="boardScroller"><div class="board">
    <div class="boardHead"><div><div style="font:800 26px Poppins">THE MUIC JOURNEY</div>
      <div class="eyebrow" style="letter-spacing:4px">DRAW YOUR VALUE · WATCH IT COME ALIVE</div></div>
-     <div style="text-align:right;font:600 13px/1.4 Inter;color:var(--sub)">Scan the QR · pick a letter · paint it<br>Your drawing joins this wall</div></div>
+     <div style="text-align:right;font:600 13px/1.4 Inter;color:var(--sub)"><span id="status" style="font-weight:700"></span><br>Scan the QR · pick a letter · paint it</div></div>
    <div class="cols" id="cols"></div></div></div>
-   <div class="row" style="margin-top:4px"><button class="pillBtn" id="draw">+ Draw yours</button>
-     <button class="ghost" id="clear">Clear wall</button></div></div>`);
-  const cols=v.querySelector('#cols');const newest=store.length?Math.max(...store.map(d=>d.t)):0;
+   <div class="row" style="margin-top:4px"><button class="pillBtn" id="draw">+ Draw yours</button></div></div>`);
+  const cols=v.querySelector('#cols');const areas=[];
   V.forEach(([L,name,col,meaning],i)=>{const tint=`color-mix(in srgb, ${col} 26%, #15124F)`;
     const c=el(`<div class="col" style="background:${tint}">
       <div class="big" style="color:${col}">${L}</div><div class="area" style="position:relative;flex:1"></div>
       <div class="meaning" style="border-color:${col}"><b><span class="chipL" style="background:${col}">${L}</span>${name}</b><i>${meaning}</i></div></div>`);
-    const area=c.querySelector('.area');const mine=store.filter(d=>d.vi===i).slice(-3);
-    mine.forEach((d,k)=>{const w=54+Math.round(Math.random()*18);
-      const s=el(`<div class="stick" style="width:${w}%;left:${6+Math.random()*28}%;top:${4+k*31+Math.random()*6}%;--r:${(Math.random()*16-8).toFixed(1)}deg"><img alt="A painted ${name}" src="${d.img}"></div>`);
-      if(d.t===newest&&!d.demo){s.style.filter='drop-shadow(0 0 10px #FFE58A) drop-shadow(0 0 4px #FFE58A)';
-        s.appendChild(el('<span class="justSent" style="right:-8px;top:-10px">JUST SENT</span>'));}
-      area.appendChild(s);});
-    cols.appendChild(c);});
+    areas.push(c.querySelector('.area'));cols.appendChild(c);});
   v.querySelector('#draw').onclick=()=>location.hash='';
-  v.querySelector('#clear').onclick=()=>{store=[];save();renderWall();};
-  app.appendChild(v);}
+  app.appendChild(v);
+  wall={areas,status:v.querySelector('#status')};wasEmpty=cloud.size===0;
+  fontsP.then(()=>{ensureDemos();for(let i=0;i<9;i++)renderColumn(i);setStatus();});}
 
 fontsP.then(route);route();
 </script>
 
-</body></html>
+</body>
+</html>
