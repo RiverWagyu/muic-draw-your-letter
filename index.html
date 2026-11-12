@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Draw Your Letter</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
-<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
 /* Layout: phone-first flow (pick → paint → sent) + a wide wall view for the projector */
 :root{
@@ -45,8 +45,12 @@ button{font-family:inherit}
 .boardScroller{overflow-x:auto;border-radius:16px}
 .board{min-width:1190px;background:var(--panel);border-radius:16px;overflow:hidden;border:1px solid var(--line)}
 .boardHead{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 18px;background:#080D2A}
-.cols{display:grid;grid-template-columns:repeat(9,minmax(0,1fr))}
-.col{position:relative;min-height:430px;border-left:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column}
+.cols{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));position:relative}
+.sky{position:absolute;left:0;right:0;top:0;bottom:150px;pointer-events:none;overflow:hidden;z-index:2}
+.fl{position:absolute;left:0;top:0;will-change:transform}
+.fl .in{position:relative;filter:drop-shadow(0 6px 8px rgba(0,0,0,.45))}
+.fl img{display:block;width:100%}
+.col{position:relative;min-height:560px;border-left:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column}
 .col .big{font:800 86px/1 Poppins;text-align:center;margin-top:8px;text-shadow:0 4px 0 rgba(0,0,0,.25)}
 .col .meaning{margin-top:auto;background:rgba(5,8,34,.55);border-top:3px solid;padding:9px 9px 11px;display:flex;flex-direction:column;gap:5px;min-height:118px}
 .col .meaning b{font:700 12.5px Poppins;display:flex;align-items:center;gap:6px}
@@ -56,7 +60,7 @@ button{font-family:inherit}
 .stick img{display:block;width:100%}
 @media (prefers-reduced-motion:no-preference){
   .stick{animation:bob 4.2s ease-in-out infinite alternate}
-  .stick.pop img{animation:pop .7s cubic-bezier(.2,1.4,.4,1) both}
+  .fl.pop img{animation:pop .7s cubic-bezier(.2,1.4,.4,1) both}
   @keyframes pop{from{transform:scale(.2) rotate(-12deg);opacity:0}to{transform:none;opacity:1}}
   @keyframes bob{from{transform:translateY(-5px) rotate(var(--r,0deg))}to{transform:translateY(7px) rotate(var(--r,0deg))}}
 }
@@ -130,8 +134,7 @@ function take(s){const d=s.val();if(!d||!okImg(d.img)||!(d.vi>=0&&d.vi<9))return
   if(loaded)setTimeout(()=>ping(d.vi|0),20500);}
 function ping(vi){dirty.add(vi);if(!raf)raf=requestAnimationFrame(flush);}
 function flush(){raf=0;const d=dirty;dirty=new Set();if(!wall)return;
-  const empty=cloud.size===0;if(empty!==wasEmpty){wasEmpty=empty;for(let i=0;i<9;i++)d.add(i);}
-  d.forEach(i=>renderColumn(i));setStatus();}
+  syncFloaters();setStatus();}
 if(db){const q=db.ref('drawings').orderByKey().limitToLast(60);
   q.on('child_added',take);q.on('child_changed',take);
   q.on('child_removed',s=>{const d=cloud.get(s.key);cloud.delete(s.key);if(d)ping(d.vi);});
@@ -148,14 +151,33 @@ function ensureDemos(){if(demoList)return;demoList=[];
     demoList.push({key:'demo'+vi,vi,img:t.toDataURL('image/png'),demo:1});}}
 function seeded(k){let s=2166136261;for(const ch of k){s^=ch.charCodeAt(0);s=Math.imul(s,16777619);}s=(s>>>0)||1;
   return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296;};}
-function renderColumn(i){if(!wall)return;const area=wall.areas[i];if(!area)return;area.innerHTML='';
-  const src=cloud.size?[...cloud.values()].filter(d=>d.vi===i).sort((a,b)=>a.key<b.key?-1:1):(demoList||[]).filter(d=>d.vi===i);
-  src.slice(-3).forEach((d,k)=>{const r=seeded(d.key),w=54+Math.round(r()*18);
-    const s=el(`<div class="stick" style="width:${w}%;left:${6+r()*28}%;top:${4+k*31+r()*6}%;--r:${(r()*16-8).toFixed(1)}deg"><img alt="A painted ${V[i][1]}"></div>`);
-    s.firstChild.src=d.img;
-    if(d.arrived&&Date.now()-d.arrived<20000){s.style.filter='drop-shadow(0 0 10px #FFE58A) drop-shadow(0 0 4px #FFE58A)';
-      s.appendChild(el('<span class="justSent" style="right:-8px;top:-10px">JUST SENT</span>'));s.classList.add('pop');}
-    area.appendChild(s);});}
+const flo=new Map();let loopOn=false,lastT=0;
+const still=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function syncFloaters(){if(!wall)return;const sky=wall.sky,W=sky.clientWidth,H=sky.clientHeight;
+  const want=cloud.size?[...cloud.values()].sort((a,b)=>a.key<b.key?-1:1).slice(-40):(demoList||[]);
+  const keep=new Set(want.map(d=>d.key));
+  for(const[k,f]of flo){if(!keep.has(k)){f.el.remove();flo.delete(k);}}
+  const w=Math.max(84,Math.min(132,W/9.5));
+  want.forEach(d=>{let f=flo.get(d.key);
+    if(!f){const r=seeded(d.key);const e=el(`<div class="fl" style="width:${w}px"><div class="in"><img alt="A painted ${V[d.vi][1]}"></div></div>`);
+      e.querySelector('img').src=d.img;sky.appendChild(e);
+      f={el:e,in:e.firstChild,x:r()*Math.max(1,W-w),y:r()*Math.max(1,H-w),
+         vx:(r()<.5?-1:1)*(14+r()*20),vy:(r()<.5?-1:1)*(9+r()*15),rot:r()*30-15,vr:(r()-.5)*7,w,badge:null};
+      flo.set(d.key,f);}
+    const fresh=!!d.arrived&&Date.now()-d.arrived<20000;
+    if(fresh&&!f.badge){f.in.style.filter='drop-shadow(0 0 12px #FFE58A) drop-shadow(0 0 4px #FFE58A)';
+      f.badge=el('<span class="justSent" style="right:-6px;top:-8px">JUST SENT</span>');f.in.appendChild(f.badge);f.el.classList.add('pop');}
+    if(!fresh&&f.badge){f.badge.remove();f.badge=null;f.in.style.filter='';}
+    place(f);});
+  if(!loopOn){loopOn=true;lastT=performance.now();requestAnimationFrame(tick);}}
+function place(f){f.el.style.transform=`translate(${f.x}px,${f.y}px) rotate(${f.rot}deg)`;}
+function tick(t){if(!wall){loopOn=false;return;}
+  const dt=Math.min(.05,(t-lastT)/1000||0);lastT=t;const W=wall.sky.clientWidth,H=wall.sky.clientHeight;
+  for(const f of flo.values()){if(!still){f.x+=f.vx*dt;f.y+=f.vy*dt;f.rot+=f.vr*dt;
+      if(f.x<0){f.x=0;f.vx=Math.abs(f.vx);}else if(f.x>W-f.w){f.x=Math.max(0,W-f.w);f.vx=-Math.abs(f.vx);}
+      if(f.y<0){f.y=0;f.vy=Math.abs(f.vy);}else if(f.y>H-f.w){f.y=Math.max(0,H-f.w);f.vy=-Math.abs(f.vy);}}
+    place(f);}
+  requestAnimationFrame(tick);}
 let sendState='',onSend=()=>{};
 function setSend(st){sendState=st;onSend();}
 function fitImage(cv){let img;try{img=cv.toDataURL('image/webp',.8);}catch(e){}
@@ -249,16 +271,17 @@ function renderWall(){app.innerHTML='';
      <div style="text-align:right;font:600 13px/1.4 Inter;color:var(--sub)"><span id="status" style="font-weight:700"></span><br>Scan the QR · pick a letter · paint it</div></div>
    <div class="cols" id="cols"></div></div></div>
    <div class="row" style="margin-top:4px"><button class="pillBtn" id="draw">+ Draw yours</button></div></div>`);
-  const cols=v.querySelector('#cols');const areas=[];
+  const cols=v.querySelector('#cols');
   V.forEach(([L,name,col,meaning],i)=>{const tint=`color-mix(in srgb, ${col} 26%, #15124F)`;
     const c=el(`<div class="col" style="background:${tint}">
       <div class="big" style="color:${col}">${L}</div><div class="area" style="position:relative;flex:1"></div>
       <div class="meaning" style="border-color:${col}"><b><span class="chipL" style="background:${col}">${L}</span>${name}</b><i>${meaning}</i></div></div>`);
-    areas.push(c.querySelector('.area'));cols.appendChild(c);});
+    cols.appendChild(c);});
+  const sky=el('<div class="sky"></div>');cols.appendChild(sky);
   v.querySelector('#draw').onclick=()=>location.hash='';
   app.appendChild(v);
-  wall={areas,status:v.querySelector('#status')};wasEmpty=cloud.size===0;
-  fontsP.then(()=>{ensureDemos();for(let i=0;i<9;i++)renderColumn(i);setStatus();});}
+  flo.clear();wall={sky,status:v.querySelector('#status')};
+  fontsP.then(()=>{ensureDemos();syncFloaters();setStatus();});}
 
 fontsP.then(route);route();
 </script>
