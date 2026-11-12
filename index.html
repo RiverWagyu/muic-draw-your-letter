@@ -163,14 +163,19 @@ function syncFloaters(){if(!wall)return;const sky=wall.sky,W=sky.clientWidth,H=s
     if(!f){const r=seeded(d.key);const e=el(`<div class="fl" style="width:${w}px"><div class="in"><img alt="A painted ${V[d.vi][1]}"></div></div>`);
       e.querySelector('img').src=d.img;sky.appendChild(e);
       f={el:e,in:e.firstChild,x:r()*Math.max(1,W-w),y:r()*Math.max(1,H-w),
-         vx:(r()<.5?-1:1)*(14+r()*20),vy:(r()<.5?-1:1)*(9+r()*15),rot:r()*30-15,vr:(r()-.5)*7,w,badge:null};
+         vx:(r()<.5?-1:1)*(14+r()*20),vy:(r()<.5?-1:1)*(9+r()*15),rot:r()*30-15,vr:(r()-.5)*7,w,isNew:true};
       flo.set(d.key,f);}
     const fresh=!!d.arrived&&Date.now()-d.arrived<20000;
-    if(fresh&&!f.badge){f.in.style.filter='drop-shadow(0 0 12px #FFE58A) drop-shadow(0 0 4px #FFE58A)';
-      f.badge=el('<span class="justSent" style="right:-6px;top:-8px">JUST SENT</span>');f.in.appendChild(f.badge);f.el.classList.add('pop');}
-    if(!fresh&&f.badge){f.badge.remove();f.badge=null;f.in.style.filter='';}
+    if(f.isNew){f.isNew=false;if(fresh){f.el.classList.add('pop');burst(sky,f.x+f.w/2,f.y+f.w/2,f.w);}}
     place(f);});
   if(!loopOn){loopOn=true;lastT=performance.now();requestAnimationFrame(tick);}}
+function burst(sky,cx,cy,w){if(still)return;const cols=V.map(v=>v[2]);
+  const ring=document.createElement('div');ring.style.cssText=`position:absolute;left:${cx-w*.5}px;top:${cy-w*.5}px;width:${w}px;height:${w}px;border-radius:50%;border:3px solid #FFE58A;pointer-events:none`;
+  sky.appendChild(ring);ring.animate([{transform:'scale(.3)',opacity:.9},{transform:'scale(2.6)',opacity:0}],{duration:650,easing:'ease-out'}).onfinish=()=>ring.remove();
+  for(let i=0;i<16;i++){const a=i/16*6.283+Math.random()*.3,dist=w*(.9+Math.random()*.9),sz=5+Math.random()*6;
+    const e=document.createElement('div');e.style.cssText=`position:absolute;left:${cx-sz/2}px;top:${cy-sz/2}px;width:${sz}px;height:${sz}px;border-radius:${i%2?'50%':'2px'};background:${cols[i%cols.length]};pointer-events:none`;
+    sky.appendChild(e);e.animate([{transform:'translate(0,0) rotate(0) scale(1)',opacity:1},{transform:`translate(${Math.cos(a)*dist}px,${Math.sin(a)*dist}px) rotate(${Math.random()*360}deg) scale(.2)`,opacity:0}],
+      {duration:600+Math.random()*350,easing:'cubic-bezier(.1,.7,.3,1)'}).onfinish=()=>e.remove();}}
 function place(f){f.el.style.transform=`translate(${f.x}px,${f.y}px) rotate(${f.rot}deg)`;}
 function tick(t){if(!wall){loopOn=false;return;}
   const dt=Math.min(.05,(t-lastT)/1000||0);lastT=t;const W=wall.sky.clientWidth,H=wall.sky.clientHeight;
